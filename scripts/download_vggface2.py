@@ -543,14 +543,18 @@ def validate_dataset(
 
         if image_count % 100_000 == 0:
             LOGGER.info(
-                "validation progress: %,d images scanned",
-                image_count,
+                f"validation progress: {image_count:,} images scanned"
             )
 
     identity_count = len(identity_counter)
 
-    LOGGER.info("detected images: %,d", image_count)
-    LOGGER.info("detected identities: %,d", identity_count)
+    LOGGER.info(
+    "validation progress: %s images scanned",
+    f"{image_count:,}",
+)
+
+    LOGGER.info("detected images: %s", f"{image_count:,}")
+    LOGGER.info("detected identities: %s", f"{identity_count:,}")
     LOGGER.info("subset counts: %s", dict(subset_counter))
 
     if image_count < minimum_image_count:
