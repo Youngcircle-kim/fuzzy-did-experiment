@@ -38,3 +38,18 @@ dataset:
       - .jpg
       - .jpeg
       - .png
+
+  split:
+    seed: 42
+
+    minimum_images_per_identity: 10
+
+    identity_groups:
+      background: 100
+      development: 100
+      evaluation: 340
+
+    enrollment_count: 5
+
+    output_split: data/splits/vggface2_split.parquet
+    output_summary: data/splits/vggface2_split_summary.json
