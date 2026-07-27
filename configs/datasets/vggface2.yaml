@@ -9,6 +9,7 @@ dataset:
   paths:
     download_dir: data/downloads/vggface2
     raw_dir: data/raw/vggface2
+    metadata_dir: data/metadata
 
   extraction:
     enabled: true
@@ -16,8 +17,22 @@ dataset:
 
   validation:
     enabled: true
-    minimum_image_count: 3000000
-    minimum_identity_count: 9000
+    minimum_image_count: 190000
+    minimum_identity_count: 500
+
+    image_extensions:
+      - .jpg
+      - .jpeg
+      - .png
+
+  indexing:
+    output_index: data/metadata/vggface2_index.parquet
+    output_summary: data/metadata/vggface2_summary.json
+    output_invalid_files: data/metadata/vggface2_invalid_files.csv
+
+    validate_images: false
+    checksum: false
+    relative_paths: true
 
     image_extensions:
       - .jpg
