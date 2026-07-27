@@ -1,0 +1,7 @@
+backend: deepface
+model_name: Facenet512
+detector_backend: retinaface
+align: true
+enforce_detection: true
+normalization: Facenet2018
+max_faces: 1

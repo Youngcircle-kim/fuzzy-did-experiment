@@ -1,0 +1,28 @@
+dataset:
+  name: vggface2
+
+  source:
+    provider: kaggle
+    dataset_handle: hearfool/vggface2
+
+  paths:
+    download_dir: data/downloads/vggface2
+    raw_dir: data/raw/vggface2
+
+  extraction:
+    enabled: true
+    overwrite: false
+    remove_archive_after_extract: false
+
+  validation:
+    enabled: true
+    expected_total_identities: 9131
+    expected_train_identities: 8631
+    expected_test_identities: 500
+    minimum_image_count: 3000000
+    minimum_identity_count: 9000
+
+    image_extensions:
+      - .jpg
+      - .jpeg
+      - .png

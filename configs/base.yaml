@@ -1,0 +1,34 @@
+project:
+  name: fuzzy-did-experiments
+  seed: 42
+  output_dir: outputs/runs
+
+data:
+  dataset_name: vggface2
+  raw_dir: data/raw/vggface2
+  metadata_dir: data/metadata
+  split_dir: data/splits
+  embedding_cache_dir: data/cache/embeddings
+
+experiment:
+  name: base
+  device: cuda
+  num_workers: 4
+  batch_size: 64
+
+face_model:
+  backend: deepface
+  model_name: Facenet512
+  detector_backend: retinaface
+  align: true
+  enforce_detection: true
+  normalization: Facenet2018
+  max_faces: 1
+
+template:
+  length: 127
+  enrollment_count: 5
+
+logging:
+  level: INFO
+  save_file: true

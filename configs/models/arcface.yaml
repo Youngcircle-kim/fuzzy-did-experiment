@@ -1,0 +1,7 @@
+backend: deepface
+model_name: ArcFace
+detector_backend: retinaface
+align: true
+enforce_detection: true
+normalization: ArcFace
+max_faces: 1
