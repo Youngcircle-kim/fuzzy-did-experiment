@@ -2,9 +2,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import ValidationError
-
 from fuzzy_did.config.schema import ExperimentConfig
+from pydantic import ValidationError
 
 
 class ConfigLoadError(RuntimeError):

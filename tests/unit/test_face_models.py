@@ -2,7 +2,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-
 from fuzzy_did.config.schema import FaceModelConfig
 from fuzzy_did.face.models import FaceEmbedding, FaceRegion
 

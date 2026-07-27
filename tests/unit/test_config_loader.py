@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import pytest
-
 from fuzzy_did.config.loader import ConfigLoadError, load_config
 
 

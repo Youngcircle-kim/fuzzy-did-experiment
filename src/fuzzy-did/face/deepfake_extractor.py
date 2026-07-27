@@ -3,7 +3,6 @@ from typing import Any
 
 import numpy as np
 from deepface import DeepFace
-
 from fuzzy_did.config.schema import FaceModelConfig
 from fuzzy_did.face.base import (
     FaceFeatureExtractionError,

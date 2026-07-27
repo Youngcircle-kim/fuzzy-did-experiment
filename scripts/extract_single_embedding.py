@@ -2,7 +2,6 @@ import argparse
 from pathlib import Path
 
 import numpy as np
-
 from fuzzy_did.config import load_config
 from fuzzy_did.face import DeepFaceFeatureExtractor
 
