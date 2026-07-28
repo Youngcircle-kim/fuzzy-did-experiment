@@ -331,7 +331,6 @@ def run_deepface(
             align=align,
             normalization=normalization,
             max_faces=max_faces,
-            silent=True,
         )
     except Exception as exc:
         raise SmokeTestError(
