@@ -48,8 +48,8 @@ dataset:
       background: 100
       development: 100
       evaluation: 340
-
-    enrollment_count: 5
-
+   
+    enrollment_candidate_count: 10
+    default_enrollment_count: 5
     output_split: data/splits/vggface2_split.parquet
     output_summary: data/splits/vggface2_split_summary.json

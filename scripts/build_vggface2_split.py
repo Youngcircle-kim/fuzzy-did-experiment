@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import sys
@@ -230,18 +231,103 @@ def assign_identity_groups(
     return assignments
 
 
-def assign_enrollment_probe_roles(
+def stable_identity_seed(
+    identity_id: str,
+    global_seed: int,
+) -> int:
+    digest = hashlib.sha256(
+        identity_id.encode("utf-8")
+    ).digest()
+
+    identity_offset = int.from_bytes(
+        digest[:4],
+        byteorder="little",
+        signed=False,
+    )
+
+    return (global_seed + identity_offset) % (2**32)
+
+
+def assign_enrollment_candidates(
     dataframe: pd.DataFrame,
-    enrollment_count: int,
+    candidate_count: int,
+    default_enrollment_count: int,
     seed: int,
 ) -> pd.DataFrame:
     """
-    Assign exactly `enrollment_count` images per identity to enrollment.
+    Select deterministic enrollment candidates for every identity.
 
-    Remaining images are assigned as probes.
+    For each identity:
+    - Randomly select exactly `candidate_count` images without replacement.
+    - Assign candidate ranks from 1 to `candidate_count`.
+    - Mark ranks 1 through `default_enrollment_count` as enrollment.
+    - Mark all remaining images as probe.
 
-    The image selection is deterministic for a fixed seed.
+    Candidate selection and rank order are deterministic for a fixed
+    global seed and identity ID.
+
+    Args:
+        dataframe:
+            Image-level dataframe. It must contain at least:
+            - identity_id
+            - image_id
+
+        candidate_count:
+            Maximum number of enrollment candidates assigned per identity.
+            For example, 10 supports enrollment-count experiments using
+            rank prefixes 1/3/5/7/10.
+
+        default_enrollment_count:
+            Number of candidates marked as enrollment in the default split.
+            This value must not exceed `candidate_count`.
+
+        seed:
+            Global random seed.
+
+    Returns:
+        A new dataframe containing:
+            - enrollment_candidate_rank: nullable integer rank 1..N
+            - sample_role: "enrollment" or "probe"
+
+    Raises:
+        DatasetSplitError:
+            If arguments are invalid or an identity has insufficient images.
     """
+
+    if dataframe.empty:
+        raise DatasetSplitError(
+            "cannot assign enrollment candidates to an empty dataframe"
+        )
+
+    required_columns = {
+        "identity_id",
+        "image_id",
+    }
+
+    missing_columns = required_columns - set(dataframe.columns)
+
+    if missing_columns:
+        raise DatasetSplitError(
+            "dataframe is missing required columns: "
+            f"{sorted(missing_columns)}"
+        )
+
+    if candidate_count <= 0:
+        raise DatasetSplitError(
+            "candidate_count must be positive"
+        )
+
+    if default_enrollment_count <= 0:
+        raise DatasetSplitError(
+            "default_enrollment_count must be positive"
+        )
+
+    if default_enrollment_count > candidate_count:
+        raise DatasetSplitError(
+            "default_enrollment_count cannot exceed candidate_count: "
+            f"default={default_enrollment_count}, "
+            f"candidate={candidate_count}"
+        )
 
     output_frames: list[pd.DataFrame] = []
 
@@ -256,77 +342,140 @@ def assign_enrollment_probe_roles(
 
         image_count = len(identity_frame)
 
-        if image_count <= enrollment_count:
+        # 최소 한 장 이상의 probe를 남긴다.
+        if image_count <= candidate_count:
             raise DatasetSplitError(
                 f"identity {identity_id} has {image_count} images, "
-                f"but enrollment_count={enrollment_count}"
+                f"but candidate_count={candidate_count}. "
+                "At least candidate_count + 1 images are required "
+                "to preserve one probe image."
             )
 
-        identity_seed = (
-            seed
-            + int.from_bytes(
-                str(identity_id).encode("utf-8"),
-                byteorder="little",
-                signed=False,
-            )
-        ) % (2**32)
+        identity_seed = stable_identity_seed(
+            identity_id=str(identity_id),
+            global_seed=seed,
+        )
 
         rng = np.random.default_rng(identity_seed)
 
-        selected_positions = rng.choice(
+        # identity_frame은 image_id 기준으로 정렬되어 있으므로,
+        # 위치 기반 random selection도 동일 seed에서 재현 가능하다.
+        candidate_positions = rng.choice(
             image_count,
-            size=enrollment_count,
+            size=candidate_count,
             replace=False,
+        )
+
+        # rng.choice가 반환한 순서를 그대로 candidate rank로 사용한다.
+        # 따라서 rank 1~3, 1~5, 1~7, 1~10은 동일 후보 순서의 prefix가 된다.
+        candidate_indices = identity_frame.index[
+            candidate_positions
+        ]
+
+        identity_frame[
+            "enrollment_candidate_rank"
+        ] = pd.Series(
+            pd.NA,
+            index=identity_frame.index,
+            dtype="Int64",
         )
 
         identity_frame["sample_role"] = "probe"
 
-        selected_index = identity_frame.index[
-            selected_positions
-        ]
-
-        identity_frame.loc[
-            selected_index,
-            "sample_role",
-        ] = "enrollment"
-
-        identity_frame["enrollment_rank"] = pd.NA
-
-        enrollment_rows = identity_frame.loc[
-            selected_index
-        ].sort_values(
-            by="image_id",
-            kind="stable",
-        )
-
         for rank, row_index in enumerate(
-            enrollment_rows.index,
+            candidate_indices,
             start=1,
         ):
             identity_frame.loc[
                 row_index,
-                "enrollment_rank",
+                "enrollment_candidate_rank",
             ] = rank
 
+            if rank <= default_enrollment_count:
+                identity_frame.loc[
+                    row_index,
+                    "sample_role",
+                ] = "enrollment"
+
+        # identity 단위 내부 검증
+        actual_candidate_count = int(
+            identity_frame[
+                "enrollment_candidate_rank"
+            ]
+            .notna()
+            .sum()
+        )
+
+        if actual_candidate_count != candidate_count:
+            raise DatasetSplitError(
+                f"candidate assignment failed for {identity_id}: "
+                f"expected={candidate_count}, "
+                f"actual={actual_candidate_count}"
+            )
+
+        actual_enrollment_count = int(
+            (
+                identity_frame["sample_role"]
+                == "enrollment"
+            ).sum()
+        )
+
+        if actual_enrollment_count != default_enrollment_count:
+            raise DatasetSplitError(
+                f"default enrollment assignment failed for {identity_id}: "
+                f"expected={default_enrollment_count}, "
+                f"actual={actual_enrollment_count}"
+            )
+
+        actual_ranks = sorted(
+            identity_frame[
+                "enrollment_candidate_rank"
+            ]
+            .dropna()
+            .astype(int)
+            .tolist()
+        )
+
+        expected_ranks = list(
+            range(1, candidate_count + 1)
+        )
+
+        if actual_ranks != expected_ranks:
+            raise DatasetSplitError(
+                f"invalid candidate ranks for {identity_id}: "
+                f"expected={expected_ranks}, "
+                f"actual={actual_ranks}"
+            )
+
         output_frames.append(identity_frame)
+
+    if not output_frames:
+        raise DatasetSplitError(
+            "no identity frames were generated"
+        )
 
     output = pd.concat(
         output_frames,
         ignore_index=True,
     )
 
-    output["enrollment_rank"] = (
-        output["enrollment_rank"]
+    output["enrollment_candidate_rank"] = (
+        output["enrollment_candidate_rank"]
         .astype("Int64")
+    )
+
+    output["sample_role"] = (
+        output["sample_role"]
+        .astype("string")
     )
 
     return output
 
-
 def validate_split(
     dataframe: pd.DataFrame,
     expected_group_counts: dict[str, int],
-    enrollment_count: int,
+    enrollment_candidate_count: int,
+    default_enrollment_count: int,
 ) -> None:
     actual_group_counts = (
         dataframe.groupby("experiment_group")["identity_id"]
@@ -345,6 +494,50 @@ def validate_split(
                 f"expected={expected_count}, actual={actual_count}"
             )
 
+    # 각 identity가 정확히 N개의 enrollment candidate를 가져야 함.
+    candidate_counts = (
+        dataframe[
+            dataframe["enrollment_candidate_rank"].notna()
+        ]
+        .groupby("identity_id")
+        .size()
+    )
+
+    invalid_candidate_counts = candidate_counts[
+        candidate_counts != enrollment_candidate_count
+    ]
+
+    if not invalid_candidate_counts.empty:
+        raise DatasetSplitError(
+            "some identities do not have the required number of "
+            "enrollment candidates:\n"
+            f"{invalid_candidate_counts.head(20)}"
+        )
+
+    # 후보 rank가 identity별로 1...N인지 확인.
+    expected_ranks = list(
+        range(1, enrollment_candidate_count + 1)
+    )
+
+    for identity_id, identity_frame in dataframe.groupby(
+        "identity_id",
+        sort=False,
+    ):
+        actual_ranks = sorted(
+            identity_frame[
+                "enrollment_candidate_rank"
+            ]
+            .dropna()
+            .astype(int)
+            .tolist()
+        )
+
+        if actual_ranks != expected_ranks:
+            raise DatasetSplitError(
+                f"invalid enrollment candidate ranks for "
+                f"{identity_id}: {actual_ranks}"
+            )
+
     enrollment_counts = (
         dataframe[
             dataframe["sample_role"] == "enrollment"
@@ -354,13 +547,14 @@ def validate_split(
     )
 
     invalid_enrollment_counts = enrollment_counts[
-        enrollment_counts != enrollment_count
+        enrollment_counts != default_enrollment_count
     ]
 
     if not invalid_enrollment_counts.empty:
         raise DatasetSplitError(
             "some identities do not have the required number of "
-            f"enrollment images:\n{invalid_enrollment_counts.head(20)}"
+            "default enrollment images:\n"
+            f"{invalid_enrollment_counts.head(20)}"
         )
 
     probe_counts = (
@@ -371,13 +565,20 @@ def validate_split(
         .size()
     )
 
+    if len(probe_counts) != dataframe["identity_id"].nunique():
+        raise DatasetSplitError(
+            "some identities have no probe images"
+        )
+
     if (probe_counts <= 0).any():
         raise DatasetSplitError(
             "some identities have no probe images"
         )
 
     group_membership_counts = (
-        dataframe.groupby("identity_id")["experiment_group"]
+        dataframe.groupby("identity_id")[
+            "experiment_group"
+        ]
         .nunique()
     )
 
@@ -386,12 +587,12 @@ def validate_split(
             "some identities belong to multiple experiment groups"
         )
 
-
 def build_summary(
     dataframe: pd.DataFrame,
     seed: int,
     minimum_images_per_identity: int,
-    enrollment_count: int,
+    enrollment_candidate_count: int,
+    default_enrollment_count: int,
 ) -> dict[str, Any]:
     group_summary: dict[str, dict[str, Any]] = {}
 
@@ -408,7 +609,14 @@ def build_summary(
                 group_frame["identity_id"].nunique()
             ),
             "image_count": int(len(group_frame)),
-            "enrollment_image_count": int(
+            "enrollment_candidate_image_count": int(
+                group_frame[
+                    "enrollment_candidate_rank"
+                ]
+                .notna()
+                .sum()
+            ),
+            "default_enrollment_image_count": int(
                 (
                     group_frame["sample_role"]
                     == "enrollment"
@@ -447,7 +655,12 @@ def build_summary(
         "minimum_images_per_identity": (
             minimum_images_per_identity
         ),
-        "enrollment_count_per_identity": enrollment_count,
+        "enrollment_candidate_count_per_identity": (
+            enrollment_candidate_count
+        ),
+        "default_enrollment_count_per_identity": (
+            default_enrollment_count
+        ),
         "total_identity_count": int(
             dataframe["identity_id"].nunique()
         ),
@@ -458,7 +671,6 @@ def build_summary(
         },
         "experiment_groups": group_summary,
     }
-
 
 def save_summary(
     summary: dict[str, Any],
@@ -479,7 +691,6 @@ def save_summary(
 
     LOGGER.info("saved split summary: %s", output_path)
 
-
 def build_split(
     index_path: Path,
     output_split_path: Path,
@@ -489,7 +700,8 @@ def build_split(
     background_count: int,
     development_count: int,
     evaluation_count: int,
-    enrollment_count: int,
+    enrollment_candidate_count: int,
+    default_enrollment_count: int,
     overwrite: bool,
 ) -> None:
     if not index_path.is_file():
@@ -501,6 +713,32 @@ def build_split(
         raise DatasetSplitError(
             f"split file already exists: {output_split_path}\n"
             "Use --overwrite to replace it."
+        )
+
+    if enrollment_candidate_count <= 0:
+        raise DatasetSplitError(
+            "enrollment_candidate_count must be positive"
+        )
+
+    if default_enrollment_count <= 0:
+        raise DatasetSplitError(
+            "default_enrollment_count must be positive"
+        )
+
+    if default_enrollment_count > enrollment_candidate_count:
+        raise DatasetSplitError(
+            "default_enrollment_count cannot exceed "
+            "enrollment_candidate_count"
+        )
+
+    # 후보 10장과 최소 1장의 probe가 필요함.
+    required_minimum = enrollment_candidate_count + 1
+
+    if minimum_images_per_identity < required_minimum:
+        raise DatasetSplitError(
+            "minimum_images_per_identity must be at least "
+            f"{required_minimum} when enrollment_candidate_count="
+            f"{enrollment_candidate_count}"
         )
 
     LOGGER.info("loading index: %s", index_path)
@@ -537,9 +775,10 @@ def build_split(
             "failed to assign experiment group to some identities"
         )
 
-    split_dataframe = assign_enrollment_probe_roles(
+    split_dataframe = assign_enrollment_candidates(
         dataframe=filtered,
-        enrollment_count=enrollment_count,
+        candidate_count=enrollment_candidate_count,
+        default_enrollment_count=default_enrollment_count,
         seed=seed,
     )
 
@@ -550,14 +789,19 @@ def build_split(
             "development": development_count,
             "evaluation": evaluation_count,
         },
-        enrollment_count=enrollment_count,
+        enrollment_candidate_count=(
+            enrollment_candidate_count
+        ),
+        default_enrollment_count=(
+            default_enrollment_count
+        ),
     )
 
     preferred_columns = [
         "identity_id",
         "experiment_group",
         "sample_role",
-        "enrollment_rank",
+        "enrollment_candidate_rank",
         "subset",
         "image_id",
         "image_path",
@@ -580,7 +824,6 @@ def build_split(
         by=[
             "experiment_group",
             "identity_id",
-            "sample_role",
             "image_id",
         ],
         kind="stable",
@@ -603,8 +846,15 @@ def build_split(
     summary = build_summary(
         dataframe=split_dataframe,
         seed=seed,
-        minimum_images_per_identity=minimum_images_per_identity,
-        enrollment_count=enrollment_count,
+        minimum_images_per_identity=(
+            minimum_images_per_identity
+        ),
+        enrollment_candidate_count=(
+            enrollment_candidate_count
+        ),
+        default_enrollment_count=(
+            default_enrollment_count
+        ),
     )
 
     save_summary(
@@ -622,15 +872,27 @@ def build_split(
         f"{summary['total_image_count']:,}",
     )
 
+    LOGGER.info(
+        "enrollment candidates per identity: %d",
+        enrollment_candidate_count,
+    )
+
+    LOGGER.info(
+        "default enrollment images per identity: %d",
+        default_enrollment_count,
+    )
+
     for group_name, group_data in summary[
         "experiment_groups"
     ].items():
         LOGGER.info(
-            "%s: identities=%s, images=%s, enrollment=%s, probe=%s",
+            "%s: identities=%s, images=%s, "
+            "candidates=%s, default_enrollment=%s, probe=%s",
             group_name,
             f"{group_data['identity_count']:,}",
             f"{group_data['image_count']:,}",
-            f"{group_data['enrollment_image_count']:,}",
+            f"{group_data['enrollment_candidate_image_count']:,}",
+            f"{group_data['default_enrollment_image_count']:,}",
             f"{group_data['probe_image_count']:,}",
         )
 
@@ -647,7 +909,13 @@ def main() -> int:
         split_config = dataset_config["split"]
 
         identity_groups = split_config["identity_groups"]
+        enrollment_candidate_count = int(
+            split_config["enrollment_candidate_count"]
+        )
 
+        default_enrollment_count = int(
+            split_config["default_enrollment_count"]
+        )
         index_path = (
             args.index
             if args.index is not None
@@ -681,14 +949,15 @@ def main() -> int:
             evaluation_count=int(
                 identity_groups["evaluation"]
             ),
-            enrollment_count=int(
-                split_config["enrollment_count"]
+            enrollment_candidate_count=(
+                enrollment_candidate_count
+            ),
+            default_enrollment_count=(
+                default_enrollment_count
             ),
             overwrite=args.overwrite,
         )
-
         return 0
-
     except KeyError as exc:
         LOGGER.error(
             "missing required configuration key: %s",
@@ -709,7 +978,6 @@ def main() -> int:
             "unexpected split-generation error"
         )
         return 99
-
 
 if __name__ == "__main__":
     sys.exit(main())
