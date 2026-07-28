@@ -5,8 +5,18 @@ experiment:
 data:
   split_path: data/splits/vggface2_split.parquet
   shard_dir: data/splits/embedding_shards/facenet512
+  cache_dir: data/cache/embeddings/facenet512
 
 sharding:
   num_shards: 4
   strategy: identity_balanced
   output_summary: data/splits/embedding_shards/facenet512/shard_summary.json
+
+face_model:
+  backend: deepface
+  model_name: Facenet512
+  detector_backend: retinaface
+  align: true
+  enforce_detection: true
+  normalization: Facenet2018
+  max_faces: 1
