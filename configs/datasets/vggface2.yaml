@@ -42,13 +42,13 @@ dataset:
   split:
     seed: 42
 
-    minimum_images_per_identity: 10
+    minimum_images_per_identity: 20
 
     identity_groups:
       background: 100
       development: 100
       evaluation: 340
-   
+
     enrollment_candidate_count: 10
     default_enrollment_count: 5
     output_split: data/splits/vggface2_split.parquet
