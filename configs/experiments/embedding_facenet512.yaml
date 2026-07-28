@@ -1,0 +1,12 @@
+experiment:
+  name: facenet512_vggface2
+  seed: 42
+
+data:
+  split_path: data/splits/vggface2_split.parquet
+  shard_dir: data/splits/embedding_shards/facenet512
+
+sharding:
+  num_shards: 4
+  strategy: identity_balanced
+  output_summary: data/splits/embedding_shards/facenet512/shard_summary.json
