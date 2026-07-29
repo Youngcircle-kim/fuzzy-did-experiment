@@ -20,3 +20,8 @@ face_model:
   enforce_detection: true
   normalization: Facenet2018
   max_faces: 1
+
+extraction:
+  expected_embedding_dimension: 512
+  save_dtype: float32
+  memory_growth: true
