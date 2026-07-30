@@ -108,3 +108,19 @@ hamming_trials:
   random_seed: 42
 
   exclude_all_enrollment_candidates: true
+
+visualization:
+  output_dir: outputs/figures/facenet512
+
+  enrollment_counts:
+    - 3
+    - 5
+    - 7
+    - 10
+
+  curve_group: evaluation
+  distribution_group: evaluation
+  template_length: 128
+
+  det_log_scale: true
+  dpi: 300
