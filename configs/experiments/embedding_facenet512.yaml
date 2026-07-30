@@ -66,3 +66,16 @@ normalization:
   lower_quantile: 25.0
   upper_quantile: 75.0
   scale_floor: 0.000001
+
+binarization:
+  output_dir: data/binary_templates/facenet512
+
+  enrollment_counts:
+    - 3
+    - 5
+    - 7
+    - 10
+
+  threshold: 0.0
+  positive_when_greater: true
+  bitorder: big
