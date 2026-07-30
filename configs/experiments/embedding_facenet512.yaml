@@ -90,3 +90,21 @@ probe_templates:
     - 10
 
   exclude_all_enrollment_candidates: true
+
+hamming_trials:
+  output_dir: data/evaluation/facenet512/hamming_trials
+
+  enrollment_counts:
+    - 3
+    - 5
+    - 7
+    - 10
+
+  experiment_groups:
+    - development
+    - evaluation
+
+  impostor_trials_per_claimant: 1000
+  random_seed: 42
+
+  exclude_all_enrollment_candidates: true
