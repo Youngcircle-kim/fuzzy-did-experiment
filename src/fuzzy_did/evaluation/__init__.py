@@ -6,7 +6,20 @@ from fuzzy_did.evaluation.hamming_trials import (
     validate_binary_template,
 )
 
+from fuzzy_did.evaluation.threshold_metrics import (
+    FixedThresholdResult,
+    ThresholdEvaluationError,
+    ThresholdSweepResult,
+    evaluate_fixed_threshold,
+    sweep_thresholds,
+)
+
 __all__ = [
+    "FixedThresholdResult",
+    "ThresholdEvaluationError",
+    "ThresholdSweepResult",
+    "evaluate_fixed_threshold",
+    "sweep_thresholds",
     "HammingTrialError",
     "HammingTrialResult",
     "hamming_distance_batch",
