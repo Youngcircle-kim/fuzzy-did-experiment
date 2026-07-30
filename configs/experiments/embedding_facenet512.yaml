@@ -38,3 +38,18 @@ templates:
 
   aggregation: median
   l2_normalize: false
+
+feature_selection:
+  output_dir: data/features/facenet512
+
+  enrollment_counts:
+    - 3
+    - 5
+    - 7
+    - 10
+
+  top_k: 128
+  stability_weight: 0.5
+  epsilon: 0.000001
+  mad_scale: 1.4826
+  use_leave_one_out_background: true
