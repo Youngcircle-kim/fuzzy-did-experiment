@@ -154,3 +154,25 @@ correction_radius:
     - evaluation
 
   template_length: 128
+
+fuzzy_extractor:
+  output_dir: data/evaluation/facenet512/fuzzy_extractor
+
+  source_template_length: 128
+  bch_codeword_length: 127
+
+  candidate_correction_capabilities:
+    - 7
+    - 15
+    - 19
+    - 23
+    - 31
+    - 39
+    - 47
+
+  preferred_correction_capabilities:
+    - 23
+    - 31
+
+  digest_algorithm: sha256
+  random_seed: 42
