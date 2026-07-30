@@ -79,3 +79,14 @@ binarization:
   threshold: 0.0
   positive_when_greater: true
   bitorder: big
+
+probe_templates:
+  output_dir: data/probe_binary_templates/facenet512
+
+  enrollment_counts:
+    - 3
+    - 5
+    - 7
+    - 10
+
+  exclude_all_enrollment_candidates: true
