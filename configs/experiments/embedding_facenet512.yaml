@@ -124,3 +124,33 @@ visualization:
 
   det_log_scale: true
   dpi: 300
+
+correction_radius:
+  output_dir: data/evaluation/facenet512/correction_radius
+
+  enrollment_counts:
+    - 3
+    - 5
+    - 7
+    - 10
+
+  correction_capabilities:
+    - 3
+    - 5
+    - 7
+    - 9
+    - 11
+    - 13
+    - 15
+    - 17
+    - 19
+    - 23
+    - 31
+    - 39
+    - 47
+
+  experiment_groups:
+    - development
+    - evaluation
+
+  template_length: 128
