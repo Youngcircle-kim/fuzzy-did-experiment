@@ -25,3 +25,16 @@ extraction:
   expected_embedding_dimension: 512
   save_dtype: float32
   memory_growth: true
+
+templates:
+  output_dir: data/templates/facenet512
+
+  enrollment_counts:
+    - 1
+    - 3
+    - 5
+    - 7
+    - 10
+
+  aggregation: median
+  l2_normalize: false
